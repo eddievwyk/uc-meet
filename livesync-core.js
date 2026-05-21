@@ -59,6 +59,25 @@ function lsParseRunResult(node){
   return out;
 }
 
+/* Combined events: combinedTable/<id>.cea[] is competitors sorted by standing.
+   Each has p (place), cp (total points), a.n / a.t.n (name / team). The feed
+   pre-computes points; we use the total as the display mark. */
+function lsParseCombined(node){
+  const cea = (node && node.cea) || [];
+  return cea.map(c => {
+    const ath = c.a || {};
+    const full = ath.n || '';
+    const sp = full.trim().split(/\s+/);
+    const fn = sp.length ? sp[0] : '';
+    const l = sp.length > 1 ? sp.slice(1).join(' ') : '';
+    return {
+      p: Number(c.p), fn, l, n: full,
+      tn: (ath.t && ath.t.n) || '',
+      mark: (c.cp != null ? c.cp : 0) + ' pts',
+    };
+  }).filter(x => x.p > 0).sort((a, b) => a.p - b.p);
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult };
+  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult, lsParseCombined };
 }

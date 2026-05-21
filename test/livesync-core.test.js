@@ -57,3 +57,13 @@ test('lsParseRunResult flattens athlete-keyed map, sorted by place', () => {
   assert.ok(fin[0].mark);   // has a time
   assert.ok(fin[0].l);      // has a last name
 });
+
+const dec = JSON.parse(fs.readFileSync(__dirname + '/fixtures/combined_decathlon.json', 'utf8'));
+
+test('lsParseCombined returns athletes by place with total score as mark', () => {
+  const fin = core.lsParseCombined(dec);
+  assert.ok(fin.length > 0);
+  assert.equal(fin[0].p, 1);
+  assert.ok(/pts$/.test(fin[0].mark));   // e.g. "3248 pts"
+  assert.ok(fin[0].l);                   // last name present
+});
