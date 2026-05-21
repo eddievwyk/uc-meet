@@ -870,6 +870,30 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .md-edit-row.uc .me-drag.drag-grip{background:var(--uc-bg-2);color:var(--uc);border-left-color:rgba(139,34,50,.18)}
 .md-edit-row.scoreline{display:block;background:transparent;border:none;padding:.4rem .8rem;font-family:var(--sans);font-weight:700;font-size:.68rem;letter-spacing:.22em;color:var(--gold-dark);text-align:center;border-top:1px dashed var(--gold);border-bottom:1px dashed var(--gold);border-radius:0;text-transform:uppercase;min-height:0;grid-column:1/-1}
 [data-theme="dark"] .md-edit-row.scoreline{color:var(--gold)}
+.md-add{margin-top:.6rem;padding-top:.6rem;border-top:1px dashed var(--line-2)}
+.md-add-input{
+  width:100%;box-sizing:border-box;padding:.6rem .75rem;
+  font-family:var(--sans);font-size:.9rem;color:var(--ink);
+  background:var(--bg);border:1px solid var(--line-2);border-radius:8px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.md-add-input::placeholder{color:var(--ink-3)}
+.md-add-input:focus{outline:none;border-color:var(--uc);box-shadow:0 0 0 3px var(--uc-bg)}
+.md-add-results{display:flex;flex-direction:column;gap:.25rem;margin-top:.4rem}
+.md-add-opt{
+  display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;
+  padding:.45rem .6rem;background:var(--surface);border:1px solid var(--line);
+  border-radius:7px;cursor:pointer;transition:background .12s,border-color .12s;
+}
+.md-add-opt:hover{background:var(--uc-bg);border-color:var(--uc-bg-2)}
+.md-add-opt-logo{display:flex;align-items:center}
+.md-add-opt-logo .school-logo,.md-add-opt-logo .logo-missing{margin:0;width:24px;height:24px}
+.md-add-opt-text{display:flex;flex-direction:column;gap:.1rem;min-width:0;flex:1}
+.md-add-opt-name{font-weight:600;font-size:.88rem;color:var(--ink);line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md-add-opt-school{font-size:.68rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md-add-opt-mark{font-family:var(--mono);font-size:.8rem;color:var(--ink-2);font-weight:600;flex-shrink:0}
+.md-add-empty{padding:.5rem .6rem;font-size:.8rem;color:var(--ink-3);text-align:center}
+.md-add-hint{margin-top:.45rem;font-size:.72rem;color:var(--ink-3);line-height:1.45}
 .md-progress-bar{height:8px;background:var(--surface-3);border-radius:99px;overflow:hidden;margin-bottom:.8rem}
 .md-progress-fill{height:100%;background:var(--green);transition:width .4s}
 
@@ -2159,6 +2183,7 @@ let state = {
   actualResults:{},      // {eventKey: [...overridden actual finish order]} - meet day edits
   expandedEvents:{},
   editingMeetDay:null,   // current eventKey being edited in meet day mode
+  meetDayShown:{},       // {eventKey: count} — how many entries the edit panel shows (default 15, grows via "+ Add athlete")
   briefGender:'Men',     // separate gender state for brief tab (shows both)
   meetDayFilter:'All',   // Meet Day: 'All' | 'Men' | 'Women' | 'FinalsOnly'
   meetDaySidebar:'Men',  // Meet Day sidebar standings: 'Men' | 'Women'
@@ -2175,7 +2200,7 @@ let state = {
 const PERSIST_KEY = 'uc-meet-state-v1';
 const PERSIST_FIELDS = [
   'tab','gender','briefGender','meetDayFilter','meetDaySidebar',
-  'overrides','actualResults','completedEvents',
+  'overrides','actualResults','completedEvents','meetDayShown',
   'expandedEvents','expandedTeams','meetDayClosedDays',
   'ucExpanded','bubbleExpanded',
 ];
@@ -2207,6 +2232,7 @@ function clearPersistedState(){
   state.overrides = {};
   state.actualResults = {};
   state.completedEvents = {};
+  state.meetDayShown = {};
   state.expandedEvents = {};
   state.expandedTeams = {};
   state.meetDayClosedDays = {};
@@ -2296,6 +2322,7 @@ function resetSharedScenario(){
   state.overrides = {};
   state.actualResults = {};
   state.completedEvents = {};
+  state.meetDayShown = {};
   render();
   showToast({title:'Reset to projected', body:'Cleared shared scenario · using baseline seed order'});
 }
@@ -2352,6 +2379,16 @@ function toggleMeetDay(day){
    ============================================================ */
 function isUC(school){return school===UC_KEY}
 function evKey(ev){return ev.gender+':'+ev.name}
+/* Display names site-wide as "First Last" (data is stored "Last, First").
+   Leaves relay placeholders ("A"/"B") and comma-less names untouched. */
+function fmtName(a){
+  if(!a) return a;
+  const i = a.indexOf(',');
+  if(i === -1) return a;
+  const last = a.slice(0,i).trim();
+  const first = a.slice(i+1).trim();
+  return first ? first+' '+last : last;
+}
 
 function calcScores(opts={}){
   /* Order of precedence per event:
@@ -2629,7 +2666,7 @@ function renderTeamBreakdown(team, liveResults, expectedTotal){
       if(s.s===team && s.pts>0){
         lines.push({
           event: ev.name, type: ev.type, isRelay,
-          name: isRelay ? `${ev.name} relay team` : s.a,
+          name: isRelay ? `${ev.name} relay team` : fmtName(s.a),
           place: s.place, mark: s.m, pts: s.pts,
         });
       }
@@ -2797,7 +2834,7 @@ function renderBrief(){
         swings.push({
           type:'hold',
           event:ev.name,
-          name:s.a==='A'?'4x Relay':s.a,
+          name:s.a==='A'?'4x Relay':fmtName(s.a),
           impactPts:s.pts,
           note:`Hold 8th in ${ev.name} — currently +1 pt; if displaced, ${ninth?ninth.s.split(' ')[0]:'rival'} picks up the point`
         });
@@ -2808,7 +2845,7 @@ function renderBrief(){
         swings.push({
           type:'break',
           event:ev.name,
-          name:s.a==='A'?'4x Relay':s.a,
+          name:s.a==='A'?'4x Relay':fmtName(s.a),
           impactPts:1,
           note:`Break into 8th vs ${eighth?eighth.s.split(' ')[0]:'incumbent'} — +1 pt swing to UC`
         });
@@ -2838,7 +2875,7 @@ function renderBrief(){
   evs.forEach(ev=>{
     ev.scored.forEach((s,i)=>{
       if(isUC(s.s) && s.place===9){
-        bubbleEvs.push({name:s.a==='A'?'4x Relay':s.a, event:ev.name, gap:1});
+        bubbleEvs.push({name:s.a==='A'?'4x Relay':fmtName(s.a), event:ev.name, gap:1});
       }
     });
   });
@@ -3182,7 +3219,7 @@ function renderEvents(){
         <div class="erank-col"><span class="erank">${s.place}</span></div>
         <div class="logo-cell">${logoFor(s.s)}</div>
         <div class="ename">
-          <span class="n">${isRelay?s.s:s.a}</span>
+          <span class="n">${isRelay?s.s:fmtName(s.a)}</span>
           ${isRelay?'':`<span class="s">${s.s}</span>`}
         </div>
         <div class="emark">${s.m}</div>
@@ -3262,7 +3299,7 @@ function renderUCDeepDive(){
      generic "4x Relay" placeholder we used before. */
   function rowName(ev, e){
     if(ev.type === 'relay') return ev.event;
-    return e.a;
+    return fmtName(e.a);
   }
 
   let html = `
@@ -3490,7 +3527,7 @@ function renderWhatIf(){
     /* For custom relay entries, show the user-typed "customName" instead of the placeholder 'A' */
     const displayName = e.custom && isRelay && e.customName
       ? `${e.s} · ${e.customName}`
-      : (isRelay ? e.s : e.a);
+      : (isRelay ? e.s : fmtName(e.a));
     const removeBtn = e.custom
       ? `<button class="remove-custom" title="Remove this custom entry" onclick="event.stopPropagation();removeCustomEntry('${whatifSelectedEvent}',${i})" aria-label="Remove">×</button>`
       : '';
@@ -3660,7 +3697,7 @@ function renderHeadToHead(){
     const gapCls = m.gap>0 ? 'uc' : m.gap<0 ? 'rival' : 'zero';
     const gapStr = m.gap===0 ? '0' : (m.gap>0?'+':'')+m.gap;
     html += `<div class="h2h-row">
-      <div class="h2h-ev-name">${m.name}<span class="t">${m.type}${m.ucBest?' · '+(m.ucBest.a==='A'?'UC '+m.ucBest.place+'th':m.ucBest.a.split(',')[0]+' '+m.ucBest.place+'th'):''}</span></div>
+      <div class="h2h-ev-name">${m.name}<span class="t">${m.type}${m.ucBest?' · '+(m.ucBest.a==='A'?'UC '+m.ucBest.place+'th':fmtName(m.ucBest.a)+' '+m.ucBest.place+'th'):''}</span></div>
       <div class="h2h-side-pts uc"><span class="pn ${m.uc===0?'dim':''}">${m.uc||'—'}</span></div>
       <div class="h2h-gap-cell ${gapCls}">${gapStr}</div>
       <div class="h2h-side-pts rival right"><span class="pn ${m.rival===0?'dim':''}">${m.rival||'—'}</span></div>
@@ -3822,13 +3859,13 @@ function renderBubble(){
         /* Displacement effect: if UC athlete jumps to 8th, the current 8th drops to 9th,
            losing 1 pt for their school. */
         const displaced = eighthAthlete ? {
-          name: eighthAthlete.a==='A' ? eighthAthlete.s+' '+ev.name : eighthAthlete.a,
+          name: eighthAthlete.a==='A' ? eighthAthlete.s+' '+ev.name : fmtName(eighthAthlete.a),
           school: eighthAthlete.s,
           mark: eighthAthlete.m,
         } : null;
 
         const b = {
-          name: e.a==='A' ? ev.name : e.a,   /* use full event name for relays (e.g. "4x800 Relay") */
+          name: e.a==='A' ? ev.name : fmtName(e.a),   /* use full event name for relays (e.g. "4x800 Relay") */
           school: e.s, event:ev.name, type:ev.type, place, gap,
           myMark, eighthMark, diff, diffStr, eighthMarkVal:eighthVal,
           isRelay: e.a==='A',
@@ -4229,8 +4266,10 @@ function renderMeetDayEditPanel(ev,k){
   const baseEntries = ev.entries;
   const isRelay = ev.type==='relay';
 
-  /* For UI we show top 15 (top 8 + a few alternates so they can move someone in/out) */
-  const shown = current.slice(0,15);
+  /* Show top 15 by default (top 8 + a few alternates). Coaches can pull additional
+     athletes into view via the "+ Add athlete" search below; meetDayShown tracks the count. */
+  const showCount = Math.min(state.meetDayShown[k] || 15, current.length);
+  const shown = current.slice(0,showCount);
 
   let html = `<div class="md-edit-panel" onclick="event.stopPropagation()">
     <div class="md-edit-panel-hdr">
@@ -4266,7 +4305,7 @@ function renderMeetDayEditPanel(ev,k){
       <div class="me-rank">${i+1}</div>
       <div class="me-logo">${logoFor(e.s)}</div>
       <div class="me-info">
-        <div class="me-name">${isRelay?e.s:e.a}${moveBadge}</div>
+        <div class="me-name">${isRelay?e.s:fmtName(e.a)}${moveBadge}</div>
         ${isRelay?'':`<div class="me-school">${e.s}</div>`}
       </div>
       <div class="me-mark">${e.m}</div>
@@ -4277,12 +4316,60 @@ function renderMeetDayEditPanel(ev,k){
 
   html += `</div>`;
 
-  if(current.length > 15){
-    html += `<div style="padding:.4rem .8rem;font-size:.75rem;color:var(--ink-3);text-align:center">+${current.length-15} more entries (DNS/DNF or non-scoring) — not shown</div>`;
+  /* "+ Add athlete" search — pull any remaining qualifier in THIS event into the
+     picker so a low-seed who scored can be placed. Lands at the bottom; drag up. */
+  if(current.length > showCount){
+    html += `<div class="md-add" onclick="event.stopPropagation()">
+      <input type="text" class="md-add-input" placeholder="+ Add an athlete who scored — search this event…"
+             oninput="filterMeetDayAdd('${k}',this)" autocomplete="off" spellcheck="false">
+      <div class="md-add-results"></div>
+      <div class="md-add-hint">${current.length-showCount} more ${isRelay?'teams':'athletes'} entered in this event. Tap one to add it to the list, then drag it to the place it finished.</div>
+    </div>`;
   }
 
   html += `</div>`;
   return html;
+}
+
+/* Live-filter hidden entries as the coach types — updates only the results box,
+   never re-renders the panel, so the input keeps focus. */
+function filterMeetDayAdd(k, inputEl){
+  const box = inputEl.parentNode.querySelector('.md-add-results');
+  if(!box) return;
+  const q = inputEl.value.trim().toLowerCase();
+  if(q.length < 1){ box.innerHTML=''; return; }
+  const ev = DATA.events.find(e=>evKey(e)===k);
+  if(!ev) return;
+  const isRelay = ev.type==='relay';
+  const current = state.actualResults[k] || ev.entries;
+  const showCount = Math.min(state.meetDayShown[k] || 15, current.length);
+  const out = [];
+  for(let idx=showCount; idx<current.length; idx++){
+    const e = current[idx];
+    const disp = isRelay ? e.s : fmtName(e.a);
+    if((disp+' '+e.s).toLowerCase().includes(q)){
+      out.push(`<button type="button" class="md-add-opt" onclick="event.stopPropagation();addMeetDayAthlete('${k}',${idx})">
+        <span class="md-add-opt-logo">${logoFor(e.s)}</span>
+        <span class="md-add-opt-text"><span class="md-add-opt-name">${disp}</span>${isRelay?'':`<span class="md-add-opt-school">${e.s}</span>`}</span>
+        <span class="md-add-opt-mark">${e.m}</span>
+      </button>`);
+      if(out.length>=8) break;
+    }
+  }
+  box.innerHTML = out.length ? out.join('') : `<div class="md-add-empty">No match in this event</div>`;
+}
+
+/* Pull a hidden entry into the visible window: move it to the first hidden slot so it
+   becomes the last visible row, then the coach drags it up to its real finishing place. */
+function addMeetDayAthlete(k, idx){
+  const ev = DATA.events.find(e=>evKey(e)===k);
+  if(!ev) return;
+  const current = state.actualResults[k] ? state.actualResults[k] : [...ev.entries];
+  const showCount = Math.min(state.meetDayShown[k] || 15, current.length);
+  if(idx < showCount || idx >= current.length) return;
+  state.actualResults[k] = spliceReorder(current, idx, showCount);
+  state.meetDayShown[k] = showCount + 1;
+  render();
 }
 
 function toggleMeetDayEdit(k){
@@ -4302,6 +4389,7 @@ function saveMeetDayActual(k){
 }
 function resetMeetDayActual(k){
   delete state.actualResults[k];
+  delete state.meetDayShown[k];
   render();
 }
 function markComplete(k,done){
@@ -4313,6 +4401,7 @@ function resetMeetDay(){
   if(!confirm('Clear ALL locked events AND actual-result edits for both genders? This wipes the live scoreboard.')) return;
   state.completedEvents = {};
   state.actualResults = {};
+  state.meetDayShown = {};
   state.editingMeetDay = null;
   render();
 }
