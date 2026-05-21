@@ -777,6 +777,13 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .md-ev-uc.none{color:var(--ink-4)}
 .md-ev-status{display:flex;justify-content:flex-end;gap:.3rem;flex-wrap:wrap}
 .md-ev .btn-mark{padding:.4rem .65rem;font-size:.72rem;font-family:var(--sans);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ls-chip{display:flex;align-items:center;gap:.5rem;padding:.5rem .7rem;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;margin-bottom:.6rem;border:1px solid var(--line)}
+.ls-chip.on{background:var(--green-bg,#e8f5ec);color:var(--green,#1c7c3a)}
+.ls-chip.off{background:var(--surface-2);color:var(--ink-3)}
+.ls-chip .ls-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ls-chip .ls-text{flex:1}
+.ls-chip .btn{flex-shrink:0}
+.ls-warn{font-size:.76rem;color:var(--gold-dark);background:var(--gold-bg);border-radius:6px;padding:.4rem .6rem;margin-bottom:.6rem;line-height:1.4}
 .md-ev-info-label{display:flex;justify-content:flex-end;font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.12em;font-weight:700;font-family:var(--sans)}
 .md-ev.ceremony .md-ev-time{color:var(--uc);font-weight:700}
 .md-ev.ceremony .md-ev-name{font-family:var(--display);font-size:1.15rem;color:var(--uc);font-weight:400;letter-spacing:.02em}
@@ -4216,7 +4223,7 @@ function renderMeetDay(){
       html += `<div class="md-ev ${rowCls}" onclick="onMeetDayRowClick(event,'${k}')">
         <div class="md-ev-time">${sched.t}</div>
         <div class="md-ev-no">${i+1}</div>
-        <div class="md-ev-name">${ev.name}${genderTag}${roundTag}</div>
+        <div class="md-ev-name">${ev.name}${genderTag}${roundTag}${state.syncLocked[k]?'<span class="round-tag" style="color:var(--gold-dark);font-weight:700">AUTO</span>':''}</div>
         <div class="md-ev-uc ${ucPtsHere>0?'has':'none'}">UC ${ucPtsHere>0?'+':''}${ucPtsHere}</div>
         <div style="text-align:center" class="hide-mobile">${statusBadge}</div>
         <div class="md-ev-status">
@@ -4240,6 +4247,12 @@ function renderMeetDay(){
   html += `</div>
 
     <aside class="md-side">
+      <div class="ls-chip ${liveSync.enabled?'on':'off'}" onclick="liveSync.enabled?liveSync.stop():liveSync.start()">
+        <span class="ls-dot"></span>
+        <span class="ls-text">Auto-sync ${liveSync.enabled?'ON':'OFF'}${liveSync.enabled?` · ${liveSync.status} · ${liveSync.syncedCount} synced`:''}</span>
+        <button class="btn ghost" onclick="event.stopPropagation();liveSync.checkNow()">Check now</button>
+      </div>
+      ${liveSync.unmatched.length ? `<div class="ls-warn">⚠️ ${liveSync.unmatched.reduce((n,u)=>n+u.list.length,0)} unmatched athlete(s) — `+liveSync.unmatched.map(u=>u.event.split(':')[1]).join(', ')+`</div>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:.4rem">
         <h3 style="margin-bottom:0;padding-bottom:0;border-bottom:none">Live Standings</h3>
         <div class="md-filter-bar" style="padding:0;background:transparent;border:none;margin:0">
