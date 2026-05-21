@@ -2390,6 +2390,31 @@ function fmtName(a){
   return first ? first+' '+last : last;
 }
 
+/* Build the scored list for one event's ordered entries.
+   If any entry carries an explicit `pl` (official place, set by synced live results),
+   places repeat for ties and points are SPLIT NAIA-style across the positions a tie
+   occupies (e.g. 5 tied for 6th occupy places 6-10 -> (3+2+1+0+0)/5 = 1.2 each).
+   With no `pl` present, behaves exactly like the old place=row, pts=POINTS[row] rule. */
+function computeScored(entries){
+  const hasPl = entries.some(e => e && e.pl != null);
+  if(!hasPl){
+    return entries.map((e,i)=>({...e, place:i+1, pts:POINTS[i+1]||0}));
+  }
+  const scored = entries.map((e,i)=>({...e, place:(e.pl!=null?e.pl:i+1)}));
+  let i = 0;
+  while(i < scored.length){
+    let j = i;
+    while(j+1 < scored.length && scored[j+1].place === scored[i].place) j++;
+    const t = j - i + 1;                 /* athletes sharing this place */
+    let sum = 0;
+    for(let pos = i+1; pos <= j+1; pos++) sum += (POINTS[pos]||0);  /* positions they occupy */
+    const share = Math.round((sum / t) * 10) / 10;
+    for(let g = i; g <= j; g++){ scored[g].pts = share; scored[g].tie = t > 1; }
+    i = j + 1;
+  }
+  return scored;
+}
+
 function calcScores(opts={}){
   /* Order of precedence per event:
      1. actualResults (meet day real outcomes)  — strongest
@@ -2415,12 +2440,22 @@ function calcScores(opts={}){
     } else {
       entries = [...ev.entries];
     }
-    const scored = entries.map((e,i)=>({...e, place:i+1, pts:POINTS[i+1]||0}));
-    scored.slice(0,8).forEach(s=>{
-      if(!teamScores[ev.gender][s.s]) teamScores[ev.gender][s.s]=0;
-      teamScores[ev.gender][s.s] += s.pts;
+    const scored = computeScored(entries);
+    /* Sum every scoring entry (not just the first 8): with split ties a points-bearing
+       place can land at position 9+ — e.g. a tie for 8th gives positions 8 AND 9 each 0.5.
+       Non-scoring positions carry pts:0, so this matches the old top-8 sum when there are no ties. */
+    scored.forEach(s=>{
+      if(s.pts>0){
+        if(!teamScores[ev.gender][s.s]) teamScores[ev.gender][s.s]=0;
+        teamScores[ev.gender][s.s] += s.pts;
+      }
     });
     eventResults.push({name:ev.name,gender:ev.gender,type:ev.type,scored,source});
+  });
+
+  /* Round team totals to 1 decimal so split-tie fractions display cleanly (no float noise). */
+  ['Men','Women'].forEach(g=>{
+    Object.keys(teamScores[g]).forEach(s=>{ teamScores[g][s] = Math.round(teamScores[g][s]*10)/10; });
   });
 
   const sortTeams = o => Object.entries(o).sort((a,b)=>b[1]-a[1]);
@@ -4269,7 +4304,8 @@ function renderMeetDayEditPanel(ev,k){
   /* Show top 15 by default (top 8 + a few alternates). Coaches can pull additional
      athletes into view via the "+ Add athlete" search below; meetDayShown tracks the count. */
   const showCount = Math.min(state.meetDayShown[k] || 15, current.length);
-  const shown = current.slice(0,showCount);
+  const scoredAll = computeScored(current);   /* tie-aware places + split points when synced (have pl) */
+  const shown = scoredAll.slice(0,showCount);
 
   let html = `<div class="md-edit-panel" onclick="event.stopPropagation()">
     <div class="md-edit-panel-hdr">
@@ -4294,7 +4330,7 @@ function renderMeetDayEditPanel(ev,k){
     else if(inTop8) cls += ' gold';
     else if(bubble) cls += ' blue';
 
-    const pts = POINTS[i+1] || 0;
+    const pts = e.pts || 0;
     const projIdx = baseEntries.findIndex(b=>b.a===e.a && b.s===e.s);
     const moved = projIdx !== -1 && projIdx !== i;
     const moveBadge = moved
@@ -4302,7 +4338,7 @@ function renderMeetDayEditPanel(ev,k){
       : '';
 
     html += `<div class="${cls}" data-drag-idx="${i}">
-      <div class="me-rank">${i+1}</div>
+      <div class="me-rank"${e.tie?' title="tie"':''}>${e.place}</div>
       <div class="me-logo">${logoFor(e.s)}</div>
       <div class="me-info">
         <div class="me-name">${isRelay?e.s:fmtName(e.a)}${moveBadge}</div>
