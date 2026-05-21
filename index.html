@@ -4455,6 +4455,90 @@ function resetMeetDay(){
 /* ============================================================
    INITIAL RENDER
    ============================================================ */
+/* ============================================================
+   LIVE AUTO-SYNC  (reads AthleticLIVE feed; writes actual results)
+   ============================================================ */
+const LIVE_MEET_ID = 73709;                       // configurable for future meets
+const LIVE_BASE = `https://trackmeet-io.firebaseio.com/meet_${LIVE_MEET_ID}`;
+const LIVE_POLL_MS = 30000;
+
+const liveSync = {
+  enabled: false, applyWrites: false,   // applyWrites flipped on in Task 11
+  timer: null, lastCheck: 0, status: 'idle', unmatched: [], syncedCount: 0, watermark: 0,
+
+  async fetchJSON(path){
+    const r = await fetch(`${LIVE_BASE}/${path}.json`);
+    if(!r.ok) throw new Error('feed '+r.status);
+    return r.json();
+  },
+
+  /* Map a feed event_summary record to our app event key "Gender:Event".
+     Returns null if we don't carry that event. */
+  appKeyFor(rec){
+    const gender = rec.gl;                         // "Men"/"Women"
+    const name = (rec.ce || rec.n || '');
+    // Find a DATA event whose gender+name resolves; tolerate feed name variants.
+    const ev = DATA.events.find(e => e.gender===gender &&
+      (e.name===name || name.indexOf(e.name)!==-1 || e.name.indexOf(name)!==-1));
+    return ev ? evKey(ev) : null;
+  },
+
+  async poll(){
+    if(!this.enabled) return;
+    try{
+      this.status='checking';
+      const summary = await this.fetchJSON('event_summary');
+      let synced = 0;
+      for(const key of Object.keys(summary)){
+        const rec = summary[key];
+        if((rec.runm||'')!=='Finals') continue;            // finals only
+        const rui = rec.rui; if(!rui) continue;
+        const isCombined = (rec.ec==='Combined') || /^3[67]-/.test(rui);
+        const k = this.appKeyFor(rec); if(!k) continue;
+        // already locked & we keep-auto-updating: still re-check
+        let finishers=[], meta={es:rec.es, lv:false};
+        try{
+          if(isCombined){
+            const cid = (rui.split('-')[0]==='36') ? '11630' : '11629';
+            const node = await this.fetchJSON(`combinedTable/${cid}`);
+            meta.lv = false; meta.es = (node && node.fd===1)?'eh':rec.es;
+            finishers = lsParseCombined(node);
+            if(!(node && node.fd===1)) finishers = [];      // only when table final
+          } else {
+            const live = await this.fetchJSON(`liveRunEventList/${rui}`).catch(()=>null);
+            meta.lv = !!(live && live.lv);
+            const field = await this.fetchJSON(`liveFieldResults/${rui}`).catch(()=>null);
+            if(field && field.st){ finishers = lsParseFieldResult(field); }
+            else { const run = await this.fetchJSON(`byRoundResults/${rui}`).catch(()=>null);
+                   if(run) finishers = lsParseRunResult(run); }
+          }
+        }catch(_){ continue; }
+        if(!lsIsFinished(meta, finishers)) continue;
+        const ev = DATA.events.find(e=>evKey(e)===k);
+        const { entries, unmatched } = lsBuildActualEntries(finishers, ev.entries);
+        if(unmatched.length) this.unmatched.push({event:k, list:unmatched});
+        if(entries.length){
+          synced++;
+          if(this.applyWrites){
+            state.actualResults[k] = entries;
+            state.completedEvents[k] = true;
+            state.syncLocked[k] = true;
+          } else {
+            console.log('[liveSync would sync]', k, entries.length+' placed', unmatched.length+' unmatched');
+          }
+        }
+      }
+      this.syncedCount = synced;
+      this.status='ok'; this.lastCheck=Date.now();
+      if(this.applyWrites) render();
+    }catch(e){ this.status='offline'; }
+  },
+
+  start(){ this.enabled=true; this.unmatched=[]; this.poll(); this.timer=setInterval(()=>this.poll(), LIVE_POLL_MS); render(); },
+  stop(){ this.enabled=false; clearInterval(this.timer); this.timer=null; render(); },
+  checkNow(){ this.unmatched=[]; this.poll(); },
+};
+
 loadPersistedState();
 const _sharedScenarioLoaded = loadFromShareHash();  /* hash overrides local state if present */
 render();
