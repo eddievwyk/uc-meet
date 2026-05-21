@@ -1912,6 +1912,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div>Projections based on NAIA performance list released 05/13/2026 · Scoring engine assumes top 8 seeds advance to finals · Built by Eddie · Share freely with staff</div>
 </footer>
 
+<script src="livesync-core.js"></script>
 <script>
 /* ============================================================
    SCHOOL LOGOS — base64-encoded primary logos, keyed by DATA school name.
@@ -2184,6 +2185,7 @@ let state = {
   expandedEvents:{},
   editingMeetDay:null,   // current eventKey being edited in meet day mode
   meetDayShown:{},       // {eventKey: count} — how many entries the edit panel shows (default 15, grows via "+ Add athlete")
+  syncLocked:{},         // {eventKey: true} — synced finals; permanent, cannot be unlocked/edited
   briefGender:'Men',     // separate gender state for brief tab (shows both)
   meetDayFilter:'All',   // Meet Day: 'All' | 'Men' | 'Women' | 'FinalsOnly'
   meetDaySidebar:'Men',  // Meet Day sidebar standings: 'Men' | 'Women'
@@ -2200,7 +2202,7 @@ let state = {
 const PERSIST_KEY = 'uc-meet-state-v1';
 const PERSIST_FIELDS = [
   'tab','gender','briefGender','meetDayFilter','meetDaySidebar',
-  'overrides','actualResults','completedEvents','meetDayShown',
+  'overrides','actualResults','completedEvents','meetDayShown','syncLocked',
   'expandedEvents','expandedTeams','meetDayClosedDays',
   'ucExpanded','bubbleExpanded',
 ];
@@ -2233,6 +2235,7 @@ function clearPersistedState(){
   state.actualResults = {};
   state.completedEvents = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   state.expandedEvents = {};
   state.expandedTeams = {};
   state.meetDayClosedDays = {};
@@ -2323,6 +2326,7 @@ function resetSharedScenario(){
   state.actualResults = {};
   state.completedEvents = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   render();
   showToast({title:'Reset to projected', body:'Cleared shared scenario · using baseline seed order'});
 }
@@ -4216,9 +4220,11 @@ function renderMeetDay(){
         <div class="md-ev-uc ${ucPtsHere>0?'has':'none'}">UC ${ucPtsHere>0?'+':''}${ucPtsHere}</div>
         <div style="text-align:center" class="hide-mobile">${statusBadge}</div>
         <div class="md-ev-status">
-          ${done
-            ? `<button class="btn btn-mark ghost" onclick="event.stopPropagation();markComplete('${k}',false)">Unlock</button>`
-            : `<button class="btn btn-mark primary" onclick="event.stopPropagation();markComplete('${k}',true)">Lock</button>`}
+          ${state.syncLocked[k]
+            ? `<span class="badge medal" title="Synced from live results — final">🔒 AUTO</span>`
+            : done
+              ? `<button class="btn btn-mark ghost" onclick="event.stopPropagation();markComplete('${k}',false)">Unlock</button>`
+              : `<button class="btn btn-mark primary" onclick="event.stopPropagation();markComplete('${k}',true)">Lock</button>`}
         </div>`;
 
       if(isEditing){
@@ -4415,6 +4421,7 @@ function toggleMeetDayEdit(k){
 function onMeetDayRowClick(e,k){
   /* Toggle edit panel when clicking anywhere on the row except interactive elements */
   if(e.target.closest('button, input, select, .drag-grip, .md-edit-panel')) return;
+  if(state.syncLocked[k]) return;   // no editing synced finals
   toggleMeetDayEdit(k);
 }
 function saveMeetDayActual(k){
@@ -4424,11 +4431,13 @@ function saveMeetDayActual(k){
   render();
 }
 function resetMeetDayActual(k){
+  if(state.syncLocked[k]) return;
   delete state.actualResults[k];
   delete state.meetDayShown[k];
   render();
 }
 function markComplete(k,done){
+  if(state.syncLocked[k]) return;   // synced finals are permanent
   if(done) state.completedEvents[k] = true;
   else { delete state.completedEvents[k]; }
   render();
@@ -4438,6 +4447,7 @@ function resetMeetDay(){
   state.completedEvents = {};
   state.actualResults = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   state.editingMeetDay = null;
   render();
 }
