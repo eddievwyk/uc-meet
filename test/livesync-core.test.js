@@ -45,3 +45,15 @@ test('lsParseFieldResult returns finishers with place, name, team, metric mark',
   // five-way tie for 6th
   assert.deepEqual(fin.slice(5).map(f => f.p), [6, 6, 6, 6, 6]);
 });
+
+const w200 = JSON.parse(fs.readFileSync(__dirname + '/fixtures/run_prelim_w200.json', 'utf8'));
+
+test('lsParseRunResult flattens athlete-keyed map, sorted by place', () => {
+  const fin = core.lsParseRunResult(w200);
+  assert.ok(fin.length > 0);
+  for (let i = 1; i < fin.length; i++){
+    assert.ok(Number(fin[i - 1].p) <= Number(fin[i].p)); // ascending place
+  }
+  assert.ok(fin[0].mark);   // has a time
+  assert.ok(fin[0].l);      // has a last name
+});

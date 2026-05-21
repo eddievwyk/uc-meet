@@ -45,6 +45,20 @@ function lsParseFieldResult(node){
   });
 }
 
+/* Running events: byRoundResults/<rui> is a map keyed by athlete slug.
+   Identical schema for prelims and finals. Returns finishers sorted by place. */
+function lsParseRunResult(node){
+  if (!node || typeof node !== 'object') return [];
+  const out = [];
+  for (const slug of Object.keys(node)){
+    const a = node[slug];
+    if (!a || typeof a !== 'object' || a.p == null) continue;
+    out.push({ p: Number(a.p), fn: a.fn, l: a.l, n: a.n, tn: a.tn, mark: a.m || a.er || '', q: a.q || '' });
+  }
+  out.sort((x, y) => x.p - y.p);
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult };
+  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult };
 }
