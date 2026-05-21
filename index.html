@@ -4485,21 +4485,33 @@ const liveSync = {
     return r.json();
   },
 
-  /* Map a feed event_summary record to our app event key "Gender:Event".
-     Returns null if we don't carry that event. */
+  _evMap: null,
+  _normEv(s){
+    return (s||'').toLowerCase()
+      .replace(/^(men|women)\s+/,'')                                   // strip leading gender
+      .replace(/\s*-\s*(finals?|prelims?|preliminaries|semi[- ]?finals?)\s*$/,'') // strip round suffix
+      .replace(/race\s*walk/,'racewalk')
+      .replace(/throw/,'')
+      .replace(/met(?:er|re)s?/,'')
+      .replace(/(\d)\s*m\b/g,'$1')                                     // "200m"->"200", "4x400m"->"4x400"
+      .replace(/[^a-z0-9]/g,'');
+  },
+  /* Map a feed event_summary record to our app event key "Gender:Event" via a
+     normalized-name lookup built once from DATA.events. Returns null if not carried. */
   appKeyFor(rec){
-    const gender = rec.gl;                         // "Men"/"Women"
-    const name = (rec.ce || rec.n || '');
-    // Find a DATA event whose gender+name resolves; tolerate feed name variants.
-    const ev = DATA.events.find(e => e.gender===gender &&
-      (e.name===name || name.indexOf(e.name)!==-1 || e.name.indexOf(name)!==-1));
-    return ev ? evKey(ev) : null;
+    if(!this._evMap){
+      this._evMap = {Men:{}, Women:{}};
+      DATA.events.forEach(e=>{ (this._evMap[e.gender] || (this._evMap[e.gender]={}))[this._normEv(e.name)] = evKey(e); });
+    }
+    const g = rec.gl, nm = rec.ce || rec.n || '';
+    return (this._evMap[g] && this._evMap[g][this._normEv(nm)]) || null;
   },
 
   async poll(){
     if(!this.enabled) return;
     try{
       this.status='checking';
+      const seen = {};
       const summary = await this.fetchJSON('event_summary');
       let synced = 0;
       for(const key of Object.keys(summary)){
@@ -4508,6 +4520,7 @@ const liveSync = {
         const rui = rec.rui; if(!rui) continue;
         const isCombined = (rec.ec==='Combined') || /^3[67]-/.test(rui);
         const k = this.appKeyFor(rec); if(!k) continue;
+        if(seen[k]) continue; seen[k] = true;
         // already locked & we keep-auto-updating: still re-check
         let finishers=[], meta={es:rec.es, lv:false};
         try{
