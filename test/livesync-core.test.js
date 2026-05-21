@@ -81,3 +81,35 @@ test('lsIsFinished: not-started event is not finished', () => {
 test('lsIsFinished: no finishers is not finished', () => {
   assert.equal(core.lsIsFinished({ es: 'eh', lv: false }, []), false);
 });
+
+test('lsBuildActualEntries matches finishers to app entries, carries pl + mark', () => {
+  const finishers = core.lsParseFieldResult(hj);
+  // minimal app entries covering the HJ top 6 (Last, First / UPPER school)
+  const appEntries = [
+    { a: 'Glover, Keondre', s: 'LIFE (GA.)', m: '2.10m' },
+    { a: 'Burns, Isaac', s: 'MOUNT VERNON NAZARENE (OHIO)', m: '2.07m' },
+    { a: 'Richards, Bradley', s: 'CORNERSTONE (MICH.)', m: '2.06m' },
+    { a: 'Jones, Deandre', s: 'VOORHEES (S.C.)', m: '2.14m' },
+    { a: 'Kovach, Gunner', s: 'MARIAN (IND.)', m: '2.03m' },
+    { a: 'Drake, Philip', s: 'BRYAN (TENN.)', m: '2.03m' },
+    { a: 'Holt, Julian', s: 'ROCHESTER CHRISTIAN (MICH.)', m: '2.03m' },
+    { a: 'Caicedo Campaz, Janer', s: 'LINDSEY WILSON (KY.)', m: '2.03m' },
+    { a: 'Morton, Hollis', s: 'BREWTON-PARKER (GA.)', m: '2.03m' },
+    { a: 'Blount, Daniel', s: 'OTTAWA (KAN.)', m: '2.03m' },
+  ];
+  const { entries, unmatched } = core.lsBuildActualEntries(finishers, appEntries);
+  assert.equal(unmatched.length, 0);
+  assert.equal(entries[0].a, 'Glover, Keondre');
+  assert.equal(entries[0].pl, 1);
+  assert.equal(entries[0].m, '2.15m');
+  assert.equal(entries[5].pl, 6);
+  assert.equal(entries[9].pl, 6);   // five-way tie all carry pl:6
+});
+
+test('lsBuildActualEntries records unmatched finishers', () => {
+  const finishers = [{ p: 1, fn: 'Ghost', l: 'Runner', tn: 'X', mark: '9.9' }];
+  const { entries, unmatched } = core.lsBuildActualEntries(finishers, [{ a: 'Real, Joe', s: 'Y', m: '' }]);
+  assert.equal(entries.length, 0);
+  assert.equal(unmatched.length, 1);
+  assert.equal(unmatched[0].n, 'Ghost Runner');
+});

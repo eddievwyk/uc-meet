@@ -88,6 +88,28 @@ function lsIsFinished(meta, finishers){
   return anyPlaced;
 }
 
+/* Match parsed finishers to the app's entries for one event and produce the
+   ordered actualResults array (each carries pl = official place, m = actual mark).
+   Returns { entries, unmatched }. Unmatched finishers are reported, not dropped. */
+function lsBuildActualEntries(finishers, appEntries){
+  const used = new Array(appEntries.length).fill(false);
+  const entries = [];
+  const unmatched = [];
+  for (const f of finishers){
+    const i = lsMatchAthlete(f, appEntries, used);
+    if (i >= 0){
+      used[i] = true;
+      const ent = Object.assign({}, appEntries[i]);
+      ent.m = f.mark;
+      if (f.p != null) ent.pl = Number(f.p);
+      entries.push(ent);
+    } else {
+      unmatched.push({ n: ((f.fn || '') + ' ' + (f.l || '')).trim() || f.n, tn: f.tn, p: f.p });
+    }
+  }
+  return { entries, unmatched };
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult, lsParseCombined, lsIsFinished };
+  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult, lsParseCombined, lsIsFinished, lsBuildActualEntries };
 }
