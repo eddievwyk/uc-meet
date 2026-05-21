@@ -4476,7 +4476,7 @@ const LIVE_BASE = `https://trackmeet-io.firebaseio.com/meet_${LIVE_MEET_ID}`;
 const LIVE_POLL_MS = 30000;
 
 const liveSync = {
-  enabled: false, applyWrites: false,   // applyWrites flipped on in Task 11
+  enabled: false, applyWrites: true,   // live writes enabled
   timer: null, lastCheck: 0, status: 'idle', unmatched: [], syncedCount: 0, watermark: 0,
 
   async fetchJSON(path){
@@ -4578,6 +4578,8 @@ if(_sharedScenarioLoaded){
     duration:9000,
   }), 350);
 }
+
+liveSync.start();   // auto-sync ON by default
 
 /* Reuse the embedded NAIA championship logo as the browser tab favicon */
 (function setFavicon(){
