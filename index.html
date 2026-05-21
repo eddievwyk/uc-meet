@@ -777,6 +777,13 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .md-ev-uc.none{color:var(--ink-4)}
 .md-ev-status{display:flex;justify-content:flex-end;gap:.3rem;flex-wrap:wrap}
 .md-ev .btn-mark{padding:.4rem .65rem;font-size:.72rem;font-family:var(--sans);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ls-chip{display:flex;align-items:center;gap:.5rem;padding:.5rem .7rem;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;margin-bottom:.6rem;border:1px solid var(--line)}
+.ls-chip.on{background:var(--green-bg,#e8f5ec);color:var(--green,#1c7c3a)}
+.ls-chip.off{background:var(--surface-2);color:var(--ink-3)}
+.ls-chip .ls-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ls-chip .ls-text{flex:1}
+.ls-chip .btn{flex-shrink:0}
+.ls-warn{font-size:.76rem;color:var(--gold-dark);background:var(--gold-bg);border-radius:6px;padding:.4rem .6rem;margin-bottom:.6rem;line-height:1.4}
 .md-ev-info-label{display:flex;justify-content:flex-end;font-size:.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.12em;font-weight:700;font-family:var(--sans)}
 .md-ev.ceremony .md-ev-time{color:var(--uc);font-weight:700}
 .md-ev.ceremony .md-ev-name{font-family:var(--display);font-size:1.15rem;color:var(--uc);font-weight:400;letter-spacing:.02em}
@@ -1912,6 +1919,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div>Projections based on NAIA performance list released 05/13/2026 · Scoring engine assumes top 8 seeds advance to finals · Built by Eddie · Share freely with staff</div>
 </footer>
 
+<script src="livesync-core.js"></script>
 <script>
 /* ============================================================
    SCHOOL LOGOS — base64-encoded primary logos, keyed by DATA school name.
@@ -2184,6 +2192,7 @@ let state = {
   expandedEvents:{},
   editingMeetDay:null,   // current eventKey being edited in meet day mode
   meetDayShown:{},       // {eventKey: count} — how many entries the edit panel shows (default 15, grows via "+ Add athlete")
+  syncLocked:{},         // {eventKey: true} — synced finals; permanent, cannot be unlocked/edited
   briefGender:'Men',     // separate gender state for brief tab (shows both)
   meetDayFilter:'All',   // Meet Day: 'All' | 'Men' | 'Women' | 'FinalsOnly'
   meetDaySidebar:'Men',  // Meet Day sidebar standings: 'Men' | 'Women'
@@ -2200,7 +2209,7 @@ let state = {
 const PERSIST_KEY = 'uc-meet-state-v1';
 const PERSIST_FIELDS = [
   'tab','gender','briefGender','meetDayFilter','meetDaySidebar',
-  'overrides','actualResults','completedEvents','meetDayShown',
+  'overrides','actualResults','completedEvents','meetDayShown','syncLocked',
   'expandedEvents','expandedTeams','meetDayClosedDays',
   'ucExpanded','bubbleExpanded',
 ];
@@ -2233,6 +2242,7 @@ function clearPersistedState(){
   state.actualResults = {};
   state.completedEvents = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   state.expandedEvents = {};
   state.expandedTeams = {};
   state.meetDayClosedDays = {};
@@ -2323,6 +2333,7 @@ function resetSharedScenario(){
   state.actualResults = {};
   state.completedEvents = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   render();
   showToast({title:'Reset to projected', body:'Cleared shared scenario · using baseline seed order'});
 }
@@ -4212,13 +4223,15 @@ function renderMeetDay(){
       html += `<div class="md-ev ${rowCls}" onclick="onMeetDayRowClick(event,'${k}')">
         <div class="md-ev-time">${sched.t}</div>
         <div class="md-ev-no">${i+1}</div>
-        <div class="md-ev-name">${ev.name}${genderTag}${roundTag}</div>
+        <div class="md-ev-name">${ev.name}${genderTag}${roundTag}${state.syncLocked[k]?'<span class="round-tag" style="color:var(--gold-dark);font-weight:700">AUTO</span>':''}</div>
         <div class="md-ev-uc ${ucPtsHere>0?'has':'none'}">UC ${ucPtsHere>0?'+':''}${ucPtsHere}</div>
         <div style="text-align:center" class="hide-mobile">${statusBadge}</div>
         <div class="md-ev-status">
-          ${done
-            ? `<button class="btn btn-mark ghost" onclick="event.stopPropagation();markComplete('${k}',false)">Unlock</button>`
-            : `<button class="btn btn-mark primary" onclick="event.stopPropagation();markComplete('${k}',true)">Lock</button>`}
+          ${state.syncLocked[k]
+            ? `<span class="badge medal" title="Synced from live results — final">🔒 AUTO</span>`
+            : done
+              ? `<button class="btn btn-mark ghost" onclick="event.stopPropagation();markComplete('${k}',false)">Unlock</button>`
+              : `<button class="btn btn-mark primary" onclick="event.stopPropagation();markComplete('${k}',true)">Lock</button>`}
         </div>`;
 
       if(isEditing){
@@ -4234,6 +4247,12 @@ function renderMeetDay(){
   html += `</div>
 
     <aside class="md-side">
+      <div class="ls-chip ${liveSync.enabled?'on':'off'}" onclick="liveSync.enabled?liveSync.stop():liveSync.start()">
+        <span class="ls-dot"></span>
+        <span class="ls-text">Auto-sync ${liveSync.enabled?'ON':'OFF'}${liveSync.enabled?` · ${liveSync.status} · ${liveSync.syncedCount} synced`:''}</span>
+        <button class="btn ghost" onclick="event.stopPropagation();liveSync.checkNow()">Check now</button>
+      </div>
+      ${liveSync.unmatched.length ? `<div class="ls-warn">⚠️ ${liveSync.unmatched.reduce((n,u)=>n+u.list.length,0)} unmatched athlete(s) — `+liveSync.unmatched.map(u=>u.event.split(':')[1]).join(', ')+`</div>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:.4rem">
         <h3 style="margin-bottom:0;padding-bottom:0;border-bottom:none">Live Standings</h3>
         <div class="md-filter-bar" style="padding:0;background:transparent;border:none;margin:0">
@@ -4415,6 +4434,7 @@ function toggleMeetDayEdit(k){
 function onMeetDayRowClick(e,k){
   /* Toggle edit panel when clicking anywhere on the row except interactive elements */
   if(e.target.closest('button, input, select, .drag-grip, .md-edit-panel')) return;
+  if(state.syncLocked[k]) return;   // no editing synced finals
   toggleMeetDayEdit(k);
 }
 function saveMeetDayActual(k){
@@ -4424,11 +4444,13 @@ function saveMeetDayActual(k){
   render();
 }
 function resetMeetDayActual(k){
+  if(state.syncLocked[k]) return;
   delete state.actualResults[k];
   delete state.meetDayShown[k];
   render();
 }
 function markComplete(k,done){
+  if(state.syncLocked[k]) return;   // synced finals are permanent
   if(done) state.completedEvents[k] = true;
   else { delete state.completedEvents[k]; }
   render();
@@ -4438,6 +4460,7 @@ function resetMeetDay(){
   state.completedEvents = {};
   state.actualResults = {};
   state.meetDayShown = {};
+  state.syncLocked = {};
   state.editingMeetDay = null;
   render();
 }
@@ -4445,6 +4468,103 @@ function resetMeetDay(){
 /* ============================================================
    INITIAL RENDER
    ============================================================ */
+/* ============================================================
+   LIVE AUTO-SYNC  (reads AthleticLIVE feed; writes actual results)
+   ============================================================ */
+const LIVE_MEET_ID = 73709;                       // configurable for future meets
+const LIVE_BASE = `https://trackmeet-io.firebaseio.com/meet_${LIVE_MEET_ID}`;
+const LIVE_POLL_MS = 30000;
+
+const liveSync = {
+  enabled: false, applyWrites: true,   // live writes enabled
+  timer: null, lastCheck: 0, status: 'idle', unmatched: [], syncedCount: 0, watermark: 0,
+
+  async fetchJSON(path){
+    const r = await fetch(`${LIVE_BASE}/${path}.json`);
+    if(!r.ok) throw new Error('feed '+r.status);
+    return r.json();
+  },
+
+  _evMap: null,
+  _normEv(s){
+    return (s||'').toLowerCase()
+      .replace(/^(men|women)\s+/,'')                                   // strip leading gender
+      .replace(/\s*-\s*(finals?|prelims?|preliminaries|semi[- ]?finals?)\s*$/,'') // strip round suffix
+      .replace(/race\s*walk/,'racewalk')
+      .replace(/throw/,'')
+      .replace(/met(?:er|re)s?/,'')
+      .replace(/(\d)\s*m\b/g,'$1')                                     // "200m"->"200", "4x400m"->"4x400"
+      .replace(/[^a-z0-9]/g,'');
+  },
+  /* Map a feed event_summary record to our app event key "Gender:Event" via a
+     normalized-name lookup built once from DATA.events. Returns null if not carried. */
+  appKeyFor(rec){
+    if(!this._evMap){
+      this._evMap = {Men:{}, Women:{}};
+      DATA.events.forEach(e=>{ (this._evMap[e.gender] || (this._evMap[e.gender]={}))[this._normEv(e.name)] = evKey(e); });
+    }
+    const g = rec.gl, nm = rec.ce || rec.n || '';
+    return (this._evMap[g] && this._evMap[g][this._normEv(nm)]) || null;
+  },
+
+  async poll(){
+    if(!this.enabled) return;
+    try{
+      this.status='checking';
+      const seen = {};
+      const summary = await this.fetchJSON('event_summary');
+      let synced = 0;
+      for(const key of Object.keys(summary)){
+        const rec = summary[key];
+        if((rec.runm||'')!=='Finals') continue;            // finals only
+        const rui = rec.rui; if(!rui) continue;
+        const isCombined = (rec.ec==='Combined') || /^3[67]-/.test(rui);
+        const k = this.appKeyFor(rec); if(!k) continue;
+        if(seen[k]) continue; seen[k] = true;
+        // already locked & we keep-auto-updating: still re-check
+        let finishers=[], meta={es:rec.es, lv:false};
+        try{
+          if(isCombined){
+            const cid = (rui.split('-')[0]==='36') ? '11630' : '11629';
+            const node = await this.fetchJSON(`combinedTable/${cid}`);
+            meta.lv = false; meta.es = (node && node.fd===1)?'eh':rec.es;
+            finishers = lsParseCombined(node);
+            if(!(node && node.fd===1)) finishers = [];      // only when table final
+          } else {
+            const live = await this.fetchJSON(`liveRunEventList/${rui}`).catch(()=>null);
+            meta.lv = !!(live && live.lv);
+            const field = await this.fetchJSON(`liveFieldResults/${rui}`).catch(()=>null);
+            if(field && field.st){ finishers = lsParseFieldResult(field); }
+            else { const run = await this.fetchJSON(`byRoundResults/${rui}`).catch(()=>null);
+                   if(run) finishers = lsParseRunResult(run); }
+          }
+        }catch(_){ continue; }
+        if(!lsIsFinished(meta, finishers)) continue;
+        const ev = DATA.events.find(e=>evKey(e)===k);
+        const { entries, unmatched } = lsBuildActualEntries(finishers, ev.entries);
+        if(unmatched.length) this.unmatched.push({event:k, list:unmatched});
+        if(entries.length){
+          synced++;
+          if(this.applyWrites){
+            state.actualResults[k] = entries;
+            state.completedEvents[k] = true;
+            state.syncLocked[k] = true;
+          } else {
+            console.log('[liveSync would sync]', k, entries.length+' placed', unmatched.length+' unmatched');
+          }
+        }
+      }
+      this.syncedCount = synced;
+      this.status='ok'; this.lastCheck=Date.now();
+      if(this.applyWrites) render();
+    }catch(e){ this.status='offline'; }
+  },
+
+  start(){ this.enabled=true; this.unmatched=[]; this.poll(); this.timer=setInterval(()=>this.poll(), LIVE_POLL_MS); render(); },
+  stop(){ this.enabled=false; clearInterval(this.timer); this.timer=null; render(); },
+  checkNow(){ this.unmatched=[]; this.poll(); },
+};
+
 loadPersistedState();
 const _sharedScenarioLoaded = loadFromShareHash();  /* hash overrides local state if present */
 render();
@@ -4458,6 +4578,8 @@ if(_sharedScenarioLoaded){
     duration:9000,
   }), 350);
 }
+
+liveSync.start();   // auto-sync ON by default
 
 /* Reuse the embedded NAIA championship logo as the browser tab favicon */
 (function setFavicon(){
