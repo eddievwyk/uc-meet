@@ -78,6 +78,16 @@ function lsParseCombined(node){
   }).filter(x => x.p > 0).sort((a, b) => a.p - b.p);
 }
 
+/* A final is FINISHED (-> sync + lock) when it has results, is not live, and is
+   not in the not-started state. `meta` = { es, lv }. finishers = parsed array. */
+function lsIsFinished(meta, finishers){
+  if (!finishers || finishers.length === 0) return false;
+  if (meta && meta.lv === true) return false;
+  if (meta && meta.es === 'nd') return false;
+  const anyPlaced = finishers.some(f => f.p != null && Number(f.p) > 0);
+  return anyPlaced;
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult, lsParseCombined };
+  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult, lsParseRunResult, lsParseCombined, lsIsFinished };
 }

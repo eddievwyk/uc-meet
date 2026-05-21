@@ -67,3 +67,17 @@ test('lsParseCombined returns athletes by place with total score as mark', () =>
   assert.ok(/pts$/.test(fin[0].mark));   // e.g. "3248 pts"
   assert.ok(fin[0].l);                   // last name present
 });
+
+test('lsIsFinished: field final with results and not live is finished', () => {
+  const finishers = core.lsParseFieldResult(hj);
+  assert.equal(core.lsIsFinished({ es: 'eh', lv: false }, finishers), true);
+});
+test('lsIsFinished: live event is not finished', () => {
+  assert.equal(core.lsIsFinished({ es: 'eh', lv: true }, [{ p: 1 }]), false);
+});
+test('lsIsFinished: not-started event is not finished', () => {
+  assert.equal(core.lsIsFinished({ es: 'nd', lv: false }, []), false);
+});
+test('lsIsFinished: no finishers is not finished', () => {
+  assert.equal(core.lsIsFinished({ es: 'eh', lv: false }, []), false);
+});
