@@ -30,6 +30,21 @@ function lsMatchAthlete(feed, appEntries, used){
   return -1;
 }
 
+/* Field events (HJ/PV/LJ/throws). Reads the `st` array. Vertical jumps store the
+   metric mark in bm.hgt; horizontal/throws in bm.m. Returns [{p,fn,l,n,tn,mark,dns}]. */
+function lsParseFieldResult(node){
+  const st = (node && node.st) || [];
+  return st.map(a => {
+    const bm = a.bm || {};
+    const metric = bm.hgt != null ? bm.hgt : bm.m;
+    return {
+      p: a.p, fn: a.fn, l: a.l, n: a.n, tn: a.tn,
+      mark: metric != null ? (metric + 'm') : (a.er || ''),
+      dns: !!a.dns,
+    };
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete };
+  module.exports = { lsNormalizeName, lsAppLastFirst, lsMatchAthlete, lsParseFieldResult };
 }

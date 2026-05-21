@@ -31,3 +31,17 @@ test('lsMatchAthlete respects used[] (no double match)', () => {
   const idx = core.lsMatchAthlete({ fn: 'Joe', l: 'Smith', tn: 'Z' }, app, used);
   assert.equal(idx, 1);
 });
+
+const fs = require('node:fs');
+const hj = JSON.parse(fs.readFileSync(__dirname + '/fixtures/field_hj_done.json', 'utf8'));
+
+test('lsParseFieldResult returns finishers with place, name, team, metric mark', () => {
+  const fin = core.lsParseFieldResult(hj);
+  assert.equal(fin.length, 10);
+  assert.equal(fin[0].p, 1);
+  assert.equal(fin[0].fn, 'Keondre');
+  assert.equal(fin[0].l, 'Glover');
+  assert.equal(fin[0].mark, '2.15m');           // vertical: bm.hgt + 'm'
+  // five-way tie for 6th
+  assert.deepEqual(fin.slice(5).map(f => f.p), [6, 6, 6, 6, 6]);
+});
